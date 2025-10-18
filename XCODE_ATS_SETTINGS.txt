@@ -1,0 +1,174 @@
+================================================================================
+  XCODE APP TRANSPORT SECURITY (ATS) SETTINGS
+================================================================================
+
+Problem: iOS app build fails with "Multiple commands produce Info.plist"
+Solution: Add ATS settings directly in Xcode (no separate Info.plist file)
+
+================================================================================
+  WHY THIS HAPPENS
+================================================================================
+
+Modern iOS apps (iOS 14+) don't need a separate Info.plist file.
+Xcode automatically generates one during build.
+
+When you add a custom Info.plist file, Xcode tries to:
+1. Use your custom Info.plist
+2. Generate its own Info.plist
+
+Result: Build error "Multiple commands produce Info.plist"
+
+Solution: Remove the custom Info.plist and add settings in Xcode directly.
+
+================================================================================
+  FIX - ADD ATS SETTINGS IN XCODE
+================================================================================
+
+Step 1: Open Xcode Project
+  cd /Users/hungnx/PycharmProjects/picar/ios-app/PiCar
+  open PiCar.xcodeproj
+
+Step 2: Select Target
+  1. In Project Navigator (left panel), click "PiCar" (top blue icon)
+  2. In center panel, select "PiCar" under TARGETS (not PROJECTS)
+
+Step 3: Go to Info Tab
+  1. Click "Info" tab (top of center panel)
+  2. You'll see "Custom iOS Target Properties"
+
+Step 4: Add App Transport Security Settings
+  1. Hover over any existing property
+  2. Click the "+" button that appears
+  3. Select "App Transport Security Settings" from dropdown
+     (Start typing "App Transport" to find it quickly)
+  4. This creates a Dictionary entry
+
+Step 5: Add "Allow Arbitrary Loads"
+  1. Click the triangle next to "App Transport Security Settings" to expand it
+  2. Hover over "App Transport Security Settings"
+  3. Click the "+" button that appears
+  4. Select "Allow Arbitrary Loads" from dropdown
+  5. Change the value from "NO" to "YES"
+     (Click on "NO" to change it to "YES")
+
+Step 6: Add "Allow Local Networking"
+  1. Hover over "App Transport Security Settings" again
+  2. Click the "+" button
+  3. Select "Allows Local Networking" from dropdown
+  4. Change the value from "NO" to "YES"
+
+Step 7: Add Local Network Usage Description
+  1. Hover over any property at the root level (not inside a dictionary)
+  2. Click the "+" button
+  3. Type "Privacy - Local Network Usage Description"
+     (Or select "NSLocalNetworkUsageDescription")
+  4. Set the value to:
+     "This app needs to connect to your Raspberry Pi car on the local network for video streaming and control."
+
+Your Info tab should now show:
+
+Custom iOS Target Properties
+  ▼ App Transport Security Settings (Dictionary)
+      Allow Arbitrary Loads (Boolean) = YES
+      Allows Local Networking (Boolean) = YES
+  Privacy - Local Network Usage Description (String) = "This app needs to connect..."
+
+Step 8: Clean and Rebuild
+  1. Product > Clean Build Folder (Cmd+Shift+K)
+  2. Product > Build (Cmd+B)
+  3. Product > Run (Cmd+R)
+
+================================================================================
+  VERIFICATION
+================================================================================
+
+After adding these settings:
+
+1. Build should succeed (no "Multiple commands" error)
+2. Run the app in Simulator or device
+3. Check Xcode console for debug logs:
+
+Expected logs:
+  📹 [VideoStream] Loading MJPEG stream from: http://192.168.100.148:5000/video
+  📹 [VideoStream] Stream task started
+  📹 [VideoStream] Received response: <NSHTTPURLResponse>
+  📹 [VideoStream] Status code: 200
+  📹 [VideoStream] Content-Type: multipart/x-mixed-replace; boundary=frame
+  📹 [VideoStream] Received 33789 bytes
+  🖼️ [VideoStream] Decoded frame successfully
+  ✅ [VideoStream] First frame displayed!
+
+If you see these logs, the video stream is working!
+
+If you see ATS error:
+  ❌ [VideoStream] Error: App Transport Security has blocked...
+
+Then the ATS settings weren't applied correctly. Go back to Step 3-7.
+
+================================================================================
+  COMMON ISSUES
+================================================================================
+
+Issue: Can't find "App Transport Security Settings" in dropdown
+  → Type "App Transport" in the search/dropdown
+  → It may be listed as "NSAppTransportSecurity"
+
+Issue: Can't find "Allow Arbitrary Loads"
+  → After expanding App Transport Security Settings, click + inside it
+  → Type "Allow Arbitrary" in dropdown
+  → It may be listed as "NSAllowsArbitraryLoads"
+
+Issue: Can't find "Allows Local Networking"
+  → Type "Local Networking" in dropdown
+  → It may be listed as "NSAllowsLocalNetworking"
+
+Issue: Build still fails with "Multiple commands produce Info.plist"
+  → Check if Info.plist exists in project
+  → If yes, remove it from the project:
+    Right-click Info.plist > Delete > Remove Reference
+  → Clean Build Folder and rebuild
+
+Issue: Video still doesn't show
+  → Check Xcode console for error messages
+  → Make sure Pi server is running: ./restart_pi_server.sh
+  → Test video in browser: open http://192.168.100.148:5000/video
+  → Check you're on same network as Pi
+
+================================================================================
+  CURRENT PI SERVER STATUS
+================================================================================
+
+Server: ✅ Running (streaming 5850+ frames)
+Video Endpoint: ✅ Working (tested with curl)
+Camera: ✅ Active
+
+Test commands:
+  # Check server health
+  curl http://192.168.100.148:5000/health
+
+  # Test video stream
+  curl http://192.168.100.148:5000/video | head -c 10000 | wc -c
+  (Should return >1000)
+
+  # View in browser
+  open http://192.168.100.148:5000/video
+
+If Pi server is not responding, restart it:
+  ./restart_pi_server.sh
+
+================================================================================
+  SUMMARY
+================================================================================
+
+1. Removed custom Info.plist (causes build error)
+2. Add ATS settings directly in Xcode Info tab
+3. Three settings needed:
+   - App Transport Security Settings > Allow Arbitrary Loads = YES
+   - App Transport Security Settings > Allows Local Networking = YES
+   - Privacy - Local Network Usage Description = (explanation text)
+4. Clean Build Folder and rebuild
+5. Video stream should work!
+
+Pi server is ready and streaming - just need to configure Xcode properly.
+
+================================================================================
