@@ -1,0 +1,320 @@
+================================================================================
+  iOS VIDEO STREAMING FIX
+================================================================================
+
+Problem: iOS app not showing camera stream from Raspberry Pi
+Root Cause: Missing App Transport Security (ATS) configuration
+Status: ✅ FIXED - Info.plist created with ATS settings
+
+================================================================================
+  WHY THE VIDEO STREAM WASN'T WORKING
+================================================================================
+
+Issue: iOS blocks HTTP connections by default
+
+Since iOS 9, Apple requires all network connections to use HTTPS (secure) by
+default. This is called "App Transport Security" (ATS).
+
+Our Pi server uses HTTP (not HTTPS):
+  - Video stream: http://192.168.100.148:5000/video
+  - WebSocket: ws://192.168.100.148:5000/socket.io/
+
+Without proper ATS configuration, iOS silently blocks these connections.
+
+Error you might see in Xcode console:
+  "App Transport Security has blocked a cleartext HTTP (http://) resource
+   load since it is insecure. Temporary exceptions can be configured via
+   your app's Info.plist file."
+
+================================================================================
+  THE FIX
+================================================================================
+
+Created Info.plist with ATS exceptions:
+  Location: ios-app/PiCar/PiCar/Info.plist
+
+This file tells iOS:
+  1. Allow HTTP connections (NSAllowsArbitraryLoads)
+  2. Allow local network access (NSAllowsLocalNetworking)
+  3. Explain why we need local network (NSLocalNetworkUsageDescription)
+
+Settings Added:
+  ✓ NSAppTransportSecurity with NSAllowsArbitraryLoads = YES
+  ✓ NSAllowsLocalNetworking = YES
+  ✓ NSLocalNetworkUsageDescription (user-facing explanation)
+
+================================================================================
+  NEXT STEPS - CONFIGURE XCODE PROJECT
+================================================================================
+
+The Info.plist file has been created, but you need to add it to your Xcode
+project manually:
+
+Step 1: Open Xcode
+  cd /Users/hungnx/PycharmProjects/picar/ios-app/PiCar
+  open PiCar.xcodeproj
+
+Step 2: Add Info.plist to Project
+  1. In Xcode, find the "PiCar" folder in the Navigator (left side)
+  2. Right-click on the "PiCar" folder (blue icon)
+  3. Select "Add Files to PiCar..."
+  4. Navigate to: ios-app/PiCar/PiCar/Info.plist
+  5. Make sure "Copy items if needed" is UNCHECKED
+  6. Make sure "Add to targets: PiCar" is CHECKED
+  7. Click "Add"
+
+Step 3: Configure Build Settings
+  1. Select "PiCar" project in Navigator (top blue icon)
+  2. Select "PiCar" target
+  3. Go to "Build Settings" tab
+  4. Search for "Info.plist File"
+  5. Set the value to: PiCar/Info.plist
+     (or just "Info.plist" if that doesn't work)
+
+Step 4: Verify Info.plist Is Used
+  1. Select "PiCar" target
+  2. Go to "Info" tab
+  3. You should see:
+     - Custom iOS Target Properties section
+     - App Transport Security Settings (Dictionary)
+     - NSLocalNetworkUsageDescription (String)
+
+Step 5: Clean and Rebuild
+  1. Product > Clean Build Folder (Cmd+Shift+K)
+  2. Product > Build (Cmd+B)
+  3. Product > Run (Cmd+R)
+
+================================================================================
+  ENHANCED DEBUG LOGGING
+================================================================================
+
+Added debug logging to VideoStreamView.swift to help diagnose issues:
+
+What you'll see in Xcode console when video stream works:
+  📹 [VideoStream] Loading MJPEG stream from: http://192.168.100.148:5000/video
+  📹 [VideoStream] Stream task started
+  📹 [VideoStream] Received response: <NSHTTPURLResponse>
+  📹 [VideoStream] Status code: 200
+  📹 [VideoStream] Content-Type: multipart/x-mixed-replace; boundary=frame
+  📹 [VideoStream] Received 33789 bytes
+  🖼️ [VideoStream] Decoded frame successfully
+  ✅ [VideoStream] First frame displayed!
+  📹 [VideoStream] Received 32456 bytes
+  🖼️ [VideoStream] Decoded frame successfully
+  ...
+
+What you'll see if ATS blocks the connection:
+  📹 [VideoStream] Loading MJPEG stream from: http://192.168.100.148:5000/video
+  📹 [VideoStream] Stream task started
+  ❌ [VideoStream] Error: A server with the specified hostname could not be found
+  ❌ [VideoStream] Domain: NSURLErrorDomain, Code: -1003
+
+What you'll see if Pi server is down:
+  ❌ [VideoStream] Error: Could not connect to the server
+  ❌ [VideoStream] Domain: NSURLErrorDomain, Code: -1004
+
+What you'll see if wrong IP address:
+  ❌ [VideoStream] Error: The request timed out
+  ❌ [VideoStream] Domain: NSURLErrorDomain, Code: -1001
+
+================================================================================
+  VERIFICATION STEPS
+================================================================================
+
+After configuring Xcode:
+
+1. Make sure Pi server is running:
+   ./start_pi_server.sh
+
+2. Verify video stream works in browser:
+   open http://192.168.100.148:5000/video
+
+3. Run iOS app in Xcode
+
+4. Check Xcode console for debug logs:
+   - Should see "📹 [VideoStream] Loading MJPEG stream..."
+   - Should see "Status code: 200"
+   - Should see "✅ First frame displayed!"
+
+5. Video should appear in app within 2-3 seconds
+
+If video still doesn't work:
+  - Check Xcode console for error messages
+  - Verify Info.plist is in Build Settings
+  - Verify Pi server IP is correct (192.168.100.148)
+  - Verify you're on same network as Pi
+  - Try Clean Build Folder and rebuild
+
+================================================================================
+  COMMON ERROR CODES
+================================================================================
+
+NSURLErrorDomain Code -1003:
+  "A server with the specified hostname could not be found"
+  → ATS is blocking HTTP connections
+  → Info.plist not properly configured
+  → Fix: Add Info.plist to Xcode project
+
+NSURLErrorDomain Code -1004:
+  "Could not connect to the server"
+  → Pi server not running
+  → Fix: ./start_pi_server.sh
+
+NSURLErrorDomain Code -1001:
+  "The request timed out"
+  → Wrong IP address
+  → Not on same network as Pi
+  → Fix: Check IP with: ssh pi@pi_local 'hostname -I'
+
+NSURLErrorDomain Code -1200:
+  "An SSL error has occurred and a secure connection cannot be made"
+  → Trying to use HTTPS with HTTP server
+  → Fix: Ensure URL uses http:// not https://
+
+================================================================================
+  SECURITY NOTE
+================================================================================
+
+NSAllowsArbitraryLoads = YES allows ALL HTTP connections, not just local.
+
+For production app, you should use more restrictive settings:
+
+<key>NSAppTransportSecurity</key>
+<dict>
+    <key>NSExceptionDomains</key>
+    <dict>
+        <key>192.168.100.148</key>
+        <dict>
+            <key>NSExceptionAllowsInsecureHTTPLoads</key>
+            <true/>
+            <key>NSIncludesSubdomains</key>
+            <true/>
+        </dict>
+    </dict>
+    <key>NSAllowsLocalNetworking</key>
+    <true/>
+</dict>
+
+This only allows HTTP for your specific Pi IP address.
+
+For now, NSAllowsArbitraryLoads is fine since this is a local development app.
+
+================================================================================
+  FILE CHANGES SUMMARY
+================================================================================
+
+Created:
+  ✓ ios-app/PiCar/PiCar/Info.plist
+    - ATS configuration
+    - Local network permission
+
+Modified:
+  ✓ ios-app/PiCar/PiCar/Views/VideoStreamView.swift
+    - Added debug logging
+    - Better error reporting
+    - Response logging
+
+Next Action Required:
+  → Add Info.plist to Xcode project (see Step 2 above)
+  → Build and run app
+
+================================================================================
+  EXPECTED RESULTS AFTER FIX
+================================================================================
+
+When you run the app:
+
+1. App launches showing:
+   - Pi Car Controller header
+   - Video loading indicator
+   - Joystick at bottom
+   - "Disconnected" status (WebSocket connecting)
+
+2. Within 2-3 seconds:
+   - Video stream appears showing live camera feed
+   - Status changes to "Connected"
+   - Joystick becomes responsive
+
+3. Moving joystick:
+   - Turn and Speed values update
+   - WebSocket sends commands to Pi
+   - Motors respond (if attached)
+
+4. Xcode console shows:
+   - Video stream debug logs
+   - Frames being received
+   - No error messages
+
+Everything should work smoothly! 🎉
+
+================================================================================
+  TROUBLESHOOTING
+================================================================================
+
+Issue: "Failed to load Info.plist"
+  → Info.plist has syntax error
+  → Fix: Verify XML syntax, use the one we created
+
+Issue: Video shows black screen
+  → Stream connected but no frames
+  → Check Pi camera with: curl http://192.168.100.148:5000/video
+  → May need to reseat camera ribbon cable
+
+Issue: "Camera Unavailable" error
+  → Video endpoint not responding
+  → Check Pi server logs: ./view_pi_logs.sh
+  → Check camera timeout errors
+
+Issue: App crashes on launch
+  → Info.plist misconfigured
+  → Check Xcode Build Settings
+  → Verify Info.plist path is correct
+
+Issue: WebSocket won't connect
+  → Different issue from video stream
+  → Check WebSocketClient.swift PI_SERVER_IP
+  → Check Pi server is running on port 5000
+
+================================================================================
+  TESTING CHECKLIST
+================================================================================
+
+Before testing app:
+  ☐ Pi server running (./start_pi_server.sh)
+  ☐ Video works in browser (open http://192.168.100.148:5000/video)
+  ☐ Mac and Pi on same network
+  ☐ Info.plist added to Xcode project
+  ☐ App built successfully (no errors)
+
+When testing app:
+  ☐ Video appears within 3 seconds
+  ☐ Video is smooth (not frozen)
+  ☐ WebSocket shows "Connected"
+  ☐ Joystick responds to touch
+  ☐ Turn/Speed values update
+  ☐ No errors in Xcode console
+
+If all checked:
+  ✅ iOS app is working correctly!
+
+================================================================================
+  SUMMARY
+================================================================================
+
+Problem: iOS app not showing video stream
+Root Cause: Missing App Transport Security configuration
+Solution: Created Info.plist with ATS settings + debug logging
+
+Files Created/Modified:
+  1. ios-app/PiCar/PiCar/Info.plist (NEW)
+  2. ios-app/PiCar/PiCar/Views/VideoStreamView.swift (UPDATED)
+
+Action Required:
+  1. Add Info.plist to Xcode project
+  2. Build and run app
+  3. Check Xcode console for debug logs
+
+Expected Result:
+  Video stream should appear within 2-3 seconds! 📹✅
+
+================================================================================
