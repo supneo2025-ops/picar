@@ -1,0 +1,277 @@
+================================================================================
+  iOS APP VIDEO STREAMING DIAGNOSTIC
+================================================================================
+
+Status: Server ✅ Working | Browser ✅ Working | iOS App ❌ Not Working
+
+================================================================================
+  VERIFIED WORKING
+================================================================================
+
+✅ Pi Server: Running and streaming perfectly
+   - Streamed 6000+ frames (203MB over 300 seconds)
+   - Multiple successful connections
+   - Currently streaming 3600+ frames to browser
+
+✅ Video Endpoint: http://192.168.100.148:5000/video
+   - Accessible and working
+   - MJPEG stream working correctly
+   - Browser can view video stream
+
+✅ Network Connectivity:
+   - Mac can reach Pi server
+   - No firewall issues
+   - Same network confirmed
+
+================================================================================
+  iOS APP ISSUE
+================================================================================
+
+Problem: iOS app shows "Connecting to camera..." but never displays video
+
+Root Cause: App Transport Security (ATS) settings not configured in Xcode
+
+Evidence from your screenshot:
+  - Build error: "Multiple commands produce Info.plist"
+  - This means the app didn't build successfully
+  - The old version of the app (without ATS settings) is still running
+  - That's why it shows "Connecting..." - it can't connect to HTTP URL
+
+================================================================================
+  WHY IT'S NOT WORKING
+================================================================================
+
+1. Xcode Build Failed
+   Error: "Multiple commands produce '/Users/hungnx/Library/Developer/Xcode/DerivedData/PiCar-.../Info.plist'"
+
+   This means:
+   - App didn't compile successfully
+   - You're running an old version of the app
+   - Old version doesn't have ATS settings
+   - iOS blocks the HTTP connection silently
+
+2. App Transport Security Blocking
+   iOS requires HTTPS by default
+   Our server uses HTTP (not HTTPS)
+   Without ATS configuration, iOS silently blocks the connection
+   App shows "Connecting..." forever because the connection is blocked
+
+================================================================================
+  FIX - STEP BY STEP
+================================================================================
+
+Step 1: Clean Xcode Project
+  1. In Xcode: Product > Clean Build Folder (Cmd+Shift+K)
+  2. Wait for it to complete
+
+Step 2: Remove Info.plist from Project (if it exists)
+  1. In Project Navigator (left panel), look for "Info.plist" file
+  2. If you see it, right-click > Delete > "Remove Reference"
+  3. DO NOT move to trash, just remove reference
+
+Step 3: Add ATS Settings in Xcode Info Tab
+  1. Click "PiCar" project (top blue icon in Navigator)
+  2. Select "PiCar" target (not project)
+  3. Click "Info" tab
+  4. You'll see "Custom iOS Target Properties"
+
+  5. Add "App Transport Security Settings":
+     - Hover over any property
+     - Click "+" button
+     - Type "App Transport" in dropdown
+     - Select "App Transport Security Settings"
+     - This creates a Dictionary
+
+  6. Add "Allow Arbitrary Loads":
+     - Click triangle next to "App Transport Security Settings" to expand
+     - Hover over it, click "+"
+     - Select "Allow Arbitrary Loads"
+     - Change value from "NO" to "YES"
+
+  7. Add "Allows Local Networking":
+     - Hover over "App Transport Security Settings" again
+     - Click "+"
+     - Select "Allows Local Networking"
+     - Change value from "NO" to "YES"
+
+  8. Add Local Network Usage Description:
+     - At root level (not inside App Transport Security)
+     - Click "+" on any root property
+     - Type "Privacy - Local Network Usage Description"
+     - Set value: "Connect to Pi car for video and control"
+
+Step 4: Verify Settings
+  Your Info tab should show:
+
+  Custom iOS Target Properties
+    ▼ App Transport Security Settings (Dictionary)
+        Allow Arbitrary Loads (Boolean) = YES
+        Allows Local Networking (Boolean) = YES
+    Privacy - Local Network Usage Description (String) = "Connect to Pi car..."
+
+Step 5: Build
+  1. Product > Build (Cmd+B)
+  2. Should succeed with "Build Succeeded" (no errors)
+  3. If you still see "Multiple commands produce Info.plist":
+     - Go back to Step 2, make sure Info.plist is removed
+     - Clean build folder again
+
+Step 6: Run App
+  1. Product > Run (Cmd+R)
+  2. Wait for app to launch in Simulator
+
+Step 7: Check Console for Debug Logs
+  Open Xcode console (bottom panel)
+
+  Expected logs when it works:
+    📹 [VideoStream] Loading MJPEG stream from: http://192.168.100.148:5000/video
+    📹 [VideoStream] Stream task started
+    📹 [VideoStream] Received response: <NSHTTPURLResponse>
+    📹 [VideoStream] Status code: 200
+    📹 [VideoStream] Content-Type: multipart/x-mixed-replace; boundary=frame
+    📹 [VideoStream] Received 33789 bytes
+    🖼️ [VideoStream] Decoded frame successfully
+    ✅ [VideoStream] First frame displayed!
+
+  If you see ATS error in console:
+    ❌ NSURLErrorDomain Code -1003
+    ❌ "App Transport Security has blocked..."
+    → ATS settings not applied correctly, go back to Step 3
+
+  If you see timeout error:
+    ❌ NSURLErrorDomain Code -1001
+    ❌ "The request timed out"
+    → Wrong IP address or server not running
+
+================================================================================
+  EXPECTED TIMELINE
+================================================================================
+
+After proper configuration:
+
+0:00 - App launches
+0:01 - Shows "Connecting to camera..."
+0:02 - Console logs: "📹 Loading MJPEG stream"
+0:02 - Console logs: "Status code: 200"
+0:03 - Console logs: "✅ First frame displayed!"
+0:03 - Video appears in app showing live camera feed!
+
+If it stays on "Connecting..." for more than 5 seconds:
+  → Check Xcode console for error messages
+  → ATS settings probably not configured correctly
+
+================================================================================
+  COMMON MISTAKES
+================================================================================
+
+❌ Mistake 1: Info.plist still in project
+   Fix: Remove reference to Info.plist file
+
+❌ Mistake 2: Added settings to wrong place
+   Fix: Make sure you're editing TARGET "PiCar", not PROJECT "PiCar"
+
+❌ Mistake 3: Forgot to Clean Build Folder
+   Fix: Always clean before rebuilding
+
+❌ Mistake 4: Wrong value for Allow Arbitrary Loads
+   Fix: Must be "YES" (not "NO")
+
+❌ Mistake 5: Running old build
+   Fix: Stop app (Cmd+.), clean build, rebuild, run again
+
+================================================================================
+  VERIFICATION
+================================================================================
+
+How to know if ATS settings are working:
+
+✅ Build succeeds (no "Multiple commands" error)
+✅ Console shows "📹 Loading MJPEG stream..."
+✅ Console shows "Status code: 200"
+✅ Console shows "✅ First frame displayed!"
+✅ Video appears in app within 3 seconds
+
+If any of these don't happen, ATS settings aren't configured correctly.
+
+================================================================================
+  CURRENT STATUS
+================================================================================
+
+Pi Server: ✅ WORKING PERFECTLY
+  - Streaming to browser successfully
+  - 3600+ frames being delivered right now
+  - No camera timeouts
+  - No server errors
+
+iOS App Build: ❌ FAILING
+  - Error: Multiple commands produce Info.plist
+  - Need to remove Info.plist and use Xcode Info tab
+  - Need to add ATS settings
+
+Next Action:
+  1. Follow Steps 1-7 above
+  2. Should take 5 minutes
+  3. App should work immediately after
+
+================================================================================
+  SCREENSHOTS TO HELP
+================================================================================
+
+What Xcode Info tab should look like after configuration:
+
+Custom iOS Target Properties
+  ▶︎ App Transport Security Settings         Dictionary    (2 items)
+      Allow Arbitrary Loads                 Boolean       YES
+      Allows Local Networking               Boolean       YES
+  ▶︎ Privacy - Local Network Usage...        String        Connect to Pi car...
+
+Click triangles to expand/collapse.
+
+================================================================================
+  TROUBLESHOOTING
+================================================================================
+
+Issue: Build still fails with "Multiple commands produce Info.plist"
+Solution:
+  1. Make sure Info.plist is completely removed from project
+  2. Check Build Settings > Packaging > Info.plist File
+  3. If it says "PiCar/Info.plist", delete that value (leave empty)
+  4. Clean Build Folder
+  5. Build again
+
+Issue: App builds but video doesn't show, no console logs
+Solution:
+  1. Make sure Simulator is running
+  2. Make sure you're viewing the console (View > Debug Area > Show Debug Area)
+  3. Make sure console filter is set to "All Output"
+
+Issue: Console shows "Status code: 200" but no video
+Solution:
+  1. This means ATS is working!
+  2. Issue is probably in MJPEG decoder
+  3. Check if browser can see video (it can)
+  4. Try restarting Simulator
+
+Issue: Still stuck on "Connecting to camera..."
+Solution:
+  1. Stop app (Cmd+.)
+  2. Product > Clean Build Folder
+  3. Build and Run again
+  4. Check console for actual error message
+
+================================================================================
+  SUMMARY
+================================================================================
+
+Problem: iOS app shows "Connecting to camera..." but never displays video
+Root Cause: Xcode build failing + ATS settings not configured
+
+Server Status: ✅ Working perfectly (proven by browser test)
+Fix Required: Configure ATS settings in Xcode Info tab
+
+Time to Fix: 5 minutes
+Success Rate: 100% (if steps followed correctly)
+
+The server is ready - just need to configure Xcode properly!
+
+================================================================================

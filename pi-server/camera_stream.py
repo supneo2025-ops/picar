@@ -6,7 +6,7 @@ Provides continuous MJPEG stream over HTTP
 import io
 import time
 import logging
-from threading import Thread, Event
+from threading import Thread, Event, Lock
 from typing import Generator
 import config
 
@@ -45,6 +45,7 @@ class StreamingOutput(io.BufferedIOBase):
 class CameraStream:
     """
     Manages Raspberry Pi camera and provides MJPEG streaming
+    Supports multiple simultaneous clients
     """
 
     def __init__(self):
@@ -54,8 +55,17 @@ class CameraStream:
         self.is_initialized = False
         self.is_streaming = False
 
+        # For multi-client support
+        self.current_frame = None
+        self.frame_lock = Lock()
+        self.capture_thread = None
+        self.client_count = 0
+        self.next_client_id = 0
+
         if PICAMERA2_AVAILABLE:
             self._initialize_camera()
+            # Start background frame capture for multi-client support
+            self._start_frame_capture()
         else:
             self.logger.warning("Camera not available - streaming disabled")
 
@@ -98,48 +108,40 @@ class CameraStream:
             self.camera = None
             raise
 
-    def generate_frames(self) -> Generator[bytes, None, None]:
-        """
-        Generator that yields MJPEG frames for streaming
-
-        Yields:
-            JPEG frame data with multipart headers
-        """
-        self.logger.info("generate_frames() called")
-
+    def _start_frame_capture(self):
+        """Start background thread to continuously capture frames"""
         if not self.is_initialized:
-            self.logger.error("Camera not initialized")
-            # Return a placeholder image
-            yield self._generate_placeholder_frame()
             return
 
         self.is_streaming = True
+        self.capture_thread = Thread(target=self._capture_frames, daemon=True)
+        self.capture_thread.start()
+        self.logger.info("Background frame capture started (multi-client support enabled)")
+
+    def _capture_frames(self):
+        """Background thread that continuously captures frames"""
         frame_time = 1.0 / config.CAMERA_FRAMERATE
-        self.logger.info(f"Starting frame generation, target framerate: {config.CAMERA_FRAMERATE}fps")
+        frame_count = 0
+
+        self.logger.info("Frame capture thread running")
 
         try:
-            frame_count = 0
             while self.is_streaming:
                 start_time = time.time()
 
                 # Capture frame
-                self.logger.debug(f"Capturing frame {frame_count}...")
                 frame = self.camera.capture_array()
-                self.logger.debug(f"Frame captured, shape: {frame.shape if hasattr(frame, 'shape') else 'unknown'}")
 
                 # Convert to JPEG
                 jpeg_buffer = self._encode_jpeg(frame)
-                self.logger.debug(f"JPEG encoded, size: {len(jpeg_buffer)} bytes")
 
-                # Yield frame with MJPEG headers
-                yield (
-                    b'--frame\r\n'
-                    b'Content-Type: image/jpeg\r\n\r\n' + jpeg_buffer + b'\r\n'
-                )
+                # Store frame for all clients
+                with self.frame_lock:
+                    self.current_frame = jpeg_buffer
 
                 frame_count += 1
-                if frame_count % 30 == 0:  # Log every 30 frames
-                    self.logger.info(f"Streamed {frame_count} frames")
+                if frame_count % 100 == 0:
+                    self.logger.debug(f"Captured {frame_count} frames, {self.client_count} clients connected")
 
                 # Maintain frame rate
                 elapsed = time.time() - start_time
@@ -148,10 +150,76 @@ class CameraStream:
                     time.sleep(sleep_time)
 
         except Exception as e:
-            self.logger.error(f"Error in frame generation: {e}", exc_info=True)
+            self.logger.error(f"Error in frame capture thread: {e}", exc_info=True)
         finally:
-            self.is_streaming = False
-            self.logger.info(f"Frame generation stopped after {frame_count} frames")
+            self.logger.info(f"Frame capture thread stopped after {frame_count} frames")
+
+    def generate_frames(self) -> Generator[bytes, None, None]:
+        """
+        Generator that yields MJPEG frames for streaming
+        Serves frames from shared buffer - supports multiple clients
+
+        Yields:
+            JPEG frame data with multipart headers
+        """
+        # Assign unique client ID and increment counter
+        with self.frame_lock:
+            self.next_client_id += 1
+            client_id = self.next_client_id
+            self.client_count += 1
+
+        self.logger.info(f"Client #{client_id} connected (total clients: {self.client_count})")
+
+        if not self.is_initialized:
+            self.logger.error("Camera not initialized")
+            # Return a placeholder image
+            yield self._generate_placeholder_frame()
+            with self.frame_lock:
+                self.client_count -= 1
+            return
+
+        frame_time = 1.0 / config.CAMERA_FRAMERATE
+        self.logger.info(f"Client #{client_id} streaming at {config.CAMERA_FRAMERATE}fps")
+
+        try:
+            frame_count = 0
+            last_frame = None
+
+            while True:
+                start_time = time.time()
+
+                # Get current frame from shared buffer
+                with self.frame_lock:
+                    current_frame = self.current_frame
+
+                # Only yield if we have a new frame
+                if current_frame and current_frame != last_frame:
+                    # Yield frame with MJPEG headers
+                    yield (
+                        b'--frame\r\n'
+                        b'Content-Type: image/jpeg\r\n\r\n' + current_frame + b'\r\n'
+                    )
+
+                    last_frame = current_frame
+                    frame_count += 1
+
+                    if frame_count % 100 == 0:
+                        self.logger.debug(f"Client #{client_id} streamed {frame_count} frames")
+
+                # Maintain frame rate
+                elapsed = time.time() - start_time
+                sleep_time = max(0, frame_time - elapsed)
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+
+        except GeneratorExit:
+            self.logger.info(f"Client #{client_id} disconnected normally")
+        except Exception as e:
+            self.logger.error(f"Client #{client_id} error: {e}", exc_info=True)
+        finally:
+            with self.frame_lock:
+                self.client_count -= 1
+            self.logger.info(f"Client #{client_id} stopped after {frame_count} frames (remaining clients: {self.client_count})")
 
     def _encode_jpeg(self, frame) -> bytes:
         """

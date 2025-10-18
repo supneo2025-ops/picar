@@ -1,0 +1,230 @@
+================================================================================
+  iOS APP DEBUG CHECKLIST
+================================================================================
+
+Server Status: ✅ WORKING (streaming 570+ frames)
+Browser: ✅ Should be working (test: http://192.168.100.148:5000/video)
+iOS App: ❌ NOT WORKING - Let's debug!
+
+================================================================================
+  STEP 1: CHECK XCODE CONSOLE OUTPUT
+================================================================================
+
+When you run the iOS app, open Xcode console (bottom panel).
+
+Look for these debug messages:
+
+✅ GOOD - Video streaming working:
+  📹 [VideoStream] Loading MJPEG stream from: http://192.168.100.148:5000/video
+  📹 [VideoStream] Stream task started
+  📹 [VideoStream] Received response: <NSHTTPURLResponse>
+  📹 [VideoStream] Status code: 200
+  📹 [VideoStream] Content-Type: multipart/x-mixed-replace; boundary=frame
+  📹 [VideoStream] Received 33789 bytes
+  🖼️ [VideoStream] Decoded frame successfully
+  ✅ [VideoStream] First frame displayed!
+
+❌ BAD - ATS blocking:
+  📹 [VideoStream] Loading MJPEG stream...
+  ❌ [VideoStream] Error: App Transport Security has blocked...
+  ❌ [VideoStream] Domain: NSURLErrorDomain, Code: -1003
+
+  → FIX: ATS settings not configured, go to Step 2
+
+❌ BAD - Network timeout:
+  📹 [VideoStream] Loading MJPEG stream...
+  ❌ [VideoStream] Error: The request timed out
+  ❌ [VideoStream] Domain: NSURLErrorDomain, Code: -1001
+
+  → FIX: Server not responding, restart Pi server
+
+❌ BAD - No logs at all:
+  (Nothing appears in console)
+
+  → FIX: Console filter set wrong, or app crashed on launch
+
+================================================================================
+  STEP 2: VERIFY ATS SETTINGS IN XCODE
+================================================================================
+
+1. Click "PiCar" project (blue icon at top of Navigator)
+2. Select "PiCar" TARGET (not project)
+3. Click "Info" tab
+4. Scroll down to "Custom iOS Target Properties"
+
+YOU SHOULD SEE:
+  ▼ App Transport Security Settings         Dictionary
+      Allow Arbitrary Loads                 Boolean    YES
+      Allows Local Networking               Boolean    YES
+  Privacy - Local Network Usage...          String     (some text)
+
+IF YOU DON'T SEE THIS:
+  → ATS settings not configured
+  → Follow XCODE_ATS_SETTINGS.txt to add them
+  → Clean Build Folder (Cmd+Shift+K)
+  → Build and Run again
+
+================================================================================
+  STEP 3: CHECK IP ADDRESS IN CODE
+================================================================================
+
+The app should be connecting to: 192.168.100.148:5000
+
+To verify:
+1. Open WebSocketClient.swift
+2. Look for line ~15: static let PI_SERVER_IP = "192.168.100.148"
+3. Make sure it matches your Pi's IP
+
+To check Pi's actual IP:
+  ssh pi@pi_local 'hostname -I'
+
+If IPs don't match:
+  → Update PI_SERVER_IP in WebSocketClient.swift
+  → Build and Run again
+
+================================================================================
+  STEP 4: CHECK APP PERMISSIONS
+================================================================================
+
+iOS Simulator Settings:
+1. In Simulator, go to Settings app
+2. Scroll down to find "PiCar" app
+3. Check permissions are granted
+
+Required permissions:
+  - Local Network ✅
+
+================================================================================
+  STEP 5: TEST WITH SIMPLEST POSSIBLE VIEW
+================================================================================
+
+If video still doesn't work, let's test if the issue is the MJPEG decoder.
+
+In Xcode:
+1. Run the app
+2. Look at the video area
+3. What do you see?
+
+Scenarios:
+
+A) Black screen with "Connecting to camera..."
+   → VideoStreamView is loading but never gets data
+   → Check Xcode console for errors
+   → Likely ATS or network issue
+
+B) "Camera Unavailable" with retry button
+   → VideoStreamView detected an error
+   → Check Xcode console for error details
+   → Tap retry button, check console again
+
+C) App crashes on launch
+   → Check Xcode console for crash log
+   → Look for red error messages
+
+D) Video area is blank/white
+   → UI rendering issue
+   → Check MainView.swift is showing VideoStreamView
+
+E) App shows video!
+   → 🎉 It's working!
+
+================================================================================
+  STEP 6: COMMON FIXES
+================================================================================
+
+Fix 1: Clean and Rebuild
+  Product > Clean Build Folder (Cmd+Shift+K)
+  Product > Build (Cmd+B)
+  Product > Run (Cmd+R)
+
+Fix 2: Reset Simulator
+  Device > Erase All Content and Settings
+  Run app again
+
+Fix 3: Check Server is Running
+  ./restart_pi_server.sh
+  Wait 5 seconds
+  Run iOS app again
+
+Fix 4: Use Different Simulator
+  Try iPhone 15 Pro simulator
+  iOS version 17 or later
+
+Fix 5: Check Network
+  Make sure Mac and Pi on same network
+  Try: ping 192.168.100.148
+
+================================================================================
+  STEP 7: DETAILED DEBUGGING
+================================================================================
+
+Add temporary logging to ContentView.swift or MainView.swift:
+
+In MainView.swift, add to body at the top:
+  var body: some View {
+    GeometryReader { geometry in
+      ZStack {
+        // ADD THIS LINE:
+        Text("Debug: IP=\(WebSocketClient.PI_SERVER_IP):\(WebSocketClient.PI_SERVER_PORT)")
+          .foregroundColor(.white)
+          .position(x: 100, y: 50)
+
+        // ... rest of code
+
+This will show the IP address being used.
+
+================================================================================
+  WHAT TO SHARE FOR HELP
+================================================================================
+
+If none of the above works, please share:
+
+1. Screenshot of Xcode console output
+2. What you see in the app (screenshot)
+3. Output of this command:
+   ssh pi@pi_local 'tmux capture-pane -t car_backend -p' | tail -20
+
+4. Confirmation:
+   ☐ Build succeeded (no errors)
+   ☐ App launches without crashing
+   ☐ Can see "Pi Car Controller" header
+   ☐ Can see joystick at bottom
+   ☐ Video area shows "Connecting to camera..."
+   ☐ Browser can see video at http://192.168.100.148:5000/video
+
+================================================================================
+  MOST LIKELY ISSUES
+================================================================================
+
+Based on your earlier screenshot showing build error:
+
+90% chance: ATS settings not configured properly
+  → Check Step 2 above
+  → Settings must be in Info tab
+  → Values must be YES (not NO)
+
+5% chance: Wrong IP address
+  → Check Step 3 above
+
+5% chance: Server hung again
+  → Restart server
+  → Check browser can see video
+
+================================================================================
+  QUICK TEST
+================================================================================
+
+Right now, open these three things:
+
+1. Browser window: http://192.168.100.148:5000/video
+   Can you see video? YES / NO
+
+2. Xcode console (bottom panel in Xcode)
+   Any messages with "VideoStream"? YES / NO
+
+3. iOS Simulator running PiCar app
+   What does it show? _______________________
+
+Share answers to these 3 questions for fastest help!
+
+================================================================================
