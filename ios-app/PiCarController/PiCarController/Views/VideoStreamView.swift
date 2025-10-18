@@ -50,6 +50,7 @@ struct VideoStreamView: View {
             }
         }
         .aspectRatio(4/3, contentMode: .fit)
+        .frame(maxWidth: .infinity)
         .cornerRadius(10)
         .onAppear {
             refreshStream()
@@ -162,7 +163,8 @@ class MJPEGImageView: UIImageView {
     private var receivedData = Data()
     private var isFirstFrame = true
 
-    private let boundary = "--frame"
+    private let jpegStartMarker = Data([0xFF, 0xD8])
+    private let jpegEndMarker = Data([0xFF, 0xD9])
 
     func load(url: URL) {
         stop()
@@ -208,18 +210,22 @@ extension MJPEGImageView: URLSessionDataDelegate {
     }
 
     private func processReceivedData() {
-        // Look for JPEG boundaries in the data
-        guard let boundaryData = boundary.data(using: .utf8) else { return }
+        if let startRange = receivedData.range(of: jpegStartMarker), startRange.lowerBound > 0 {
+            receivedData.removeSubrange(0..<startRange.lowerBound)
+        } else if !receivedData.isEmpty && !receivedData.starts(with: jpegStartMarker) {
+            if receivedData.count > 1_000_000 {
+                receivedData.removeAll(keepingCapacity: true)
+            }
+            return
+        }
 
-        while let range = receivedData.range(of: boundaryData) {
-            // Extract frame data before boundary
-            let frameData = receivedData.subdata(in: 0..<range.lowerBound)
+        while let startRange = receivedData.range(of: jpegStartMarker),
+              let endRange = receivedData.range(of: jpegEndMarker, in: startRange.lowerBound..<receivedData.endIndex) {
 
-            // Remove processed data
-            receivedData.removeSubrange(0..<range.upperBound)
+            let frameData = receivedData.subdata(in: startRange.lowerBound..<endRange.upperBound)
+            receivedData.removeSubrange(0..<endRange.upperBound)
 
-            // Try to create image from frame data
-            if let image = extractImageFromFrame(frameData) {
+            if let image = UIImage(data: frameData) {
                 DispatchQueue.main.async {
                     self.image = image
 
@@ -231,21 +237,11 @@ extension MJPEGImageView: URLSessionDataDelegate {
             }
         }
 
-        // Limit buffer size to prevent memory issues
-        if receivedData.count > 1_000_000 {
-            receivedData.removeAll()
+        if let startRange = receivedData.range(of: jpegStartMarker), startRange.lowerBound > 0 {
+            receivedData.removeSubrange(0..<startRange.lowerBound)
+        } else if receivedData.count > 1_000_000 {
+            receivedData.removeAll(keepingCapacity: true)
         }
-    }
-
-    private func extractImageFromFrame(_ data: Data) -> UIImage? {
-        // Look for JPEG start marker (FF D8) and end marker (FF D9)
-        guard let jpegStartRange = data.range(of: Data([0xFF, 0xD8])),
-              let jpegEndRange = data.range(of: Data([0xFF, 0xD9]), in: jpegStartRange.lowerBound..<data.endIndex) else {
-            return nil
-        }
-
-        let jpegData = data.subdata(in: jpegStartRange.lowerBound..<jpegEndRange.upperBound)
-        return UIImage(data: jpegData)
     }
 }
 

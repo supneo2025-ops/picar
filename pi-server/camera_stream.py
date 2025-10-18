@@ -4,10 +4,11 @@ Provides continuous MJPEG stream over HTTP
 """
 
 import io
-import time
 import logging
+import time
 from threading import Thread, Event, Lock
 from typing import Generator
+import eventlet
 import config
 
 try:
@@ -58,6 +59,7 @@ class CameraStream:
         # For multi-client support
         self.current_frame = None
         self.frame_lock = Lock()
+        self.frame_counter = 0
         self.capture_thread = None
         self.client_count = 0
         self.next_client_id = 0
@@ -138,6 +140,7 @@ class CameraStream:
                 # Store frame for all clients
                 with self.frame_lock:
                     self.current_frame = jpeg_buffer
+                    self.frame_counter += 1
 
                 frame_count += 1
                 if frame_count % 100 == 0:
@@ -183,34 +186,27 @@ class CameraStream:
 
         try:
             frame_count = 0
-            last_frame = None
+            last_frame_id = -1
 
             while True:
-                start_time = time.time()
-
-                # Get current frame from shared buffer
                 with self.frame_lock:
                     current_frame = self.current_frame
+                    current_frame_id = self.frame_counter
 
-                # Only yield if we have a new frame
-                if current_frame and current_frame != last_frame:
-                    # Yield frame with MJPEG headers
+                if current_frame and current_frame_id != last_frame_id:
                     yield (
                         b'--frame\r\n'
                         b'Content-Type: image/jpeg\r\n\r\n' + current_frame + b'\r\n'
                     )
 
-                    last_frame = current_frame
+                    last_frame_id = current_frame_id
                     frame_count += 1
 
                     if frame_count % 100 == 0:
                         self.logger.debug(f"Client #{client_id} streamed {frame_count} frames")
 
-                # Maintain frame rate
-                elapsed = time.time() - start_time
-                sleep_time = max(0, frame_time - elapsed)
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
+                # Yield to the eventlet scheduler to allow other clients to run
+                eventlet.sleep(frame_time / 2)
 
         except GeneratorExit:
             self.logger.info(f"Client #{client_id} disconnected normally")

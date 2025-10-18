@@ -12,6 +12,9 @@ struct MainView: View {
 
     var body: some View {
         GeometryReader { geometry in
+            let horizontalPadding: CGFloat = 20
+            let videoWidth = max(geometry.size.width - (horizontalPadding * 2), 0)
+
             ZStack {
                 // Background gradient
                 LinearGradient(
@@ -34,7 +37,9 @@ struct MainView: View {
                         serverIP: WebSocketClient.PI_SERVER_IP,
                         serverPort: WebSocketClient.PI_SERVER_PORT
                     )
-                    .padding(.horizontal, 20)
+                    .frame(width: videoWidth)
+                    .frame(height: videoWidth * 3 / 4)
+                    .padding(.horizontal, horizontalPadding)
                     .padding(.top, 20)
 
                     Spacer()
