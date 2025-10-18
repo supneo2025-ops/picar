@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pi Car Video Stream Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .video-container {
+            margin: 20px 0;
+            text-align: center;
+            background: #000;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            border: 2px solid #ddd;
+        }
+        .status {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .test-links {
+            margin: 20px 0;
+        }
+        .test-links a {
+            display: block;
+            padding: 10px;
+            margin: 5px 0;
+            background: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .test-links a:hover {
+            background: #0056b3;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚗 Pi Car Video Stream Test</h1>
+
+        <div class="status success">
+            ✅ Server: 192.168.100.148:5000
+        </div>
+
+        <div class="info">
+            <strong>📹 Live Video Stream</strong><br>
+            If you see a live camera feed below, the video stream is working!
+        </div>
+
+        <div class="video-container">
+            <h2 style="color: white; margin-top: 0;">Live Camera Feed</h2>
+            <img src="http://192.168.100.148:5000/video" alt="Pi Car Video Stream">
+        </div>
+
+        <div class="status info">
+            <strong>ℹ️ If video doesn't show:</strong><br>
+            1. Check server is running: <code>./view_pi_logs.sh</code><br>
+            2. Test in Chrome or Firefox (Safari may have issues with MJPEG)<br>
+            3. Try direct URL: <a href="http://192.168.100.148:5000/video" target="_blank">http://192.168.100.148:5000/video</a>
+        </div>
+
+        <h2>🔗 Test Links</h2>
+        <div class="test-links">
+            <a href="http://192.168.100.148:5000/" target="_blank">
+                📊 Server Status Page
+            </a>
+            <a href="http://192.168.100.148:5000/health" target="_blank">
+                ❤️ Health Check (JSON)
+            </a>
+            <a href="http://192.168.100.148:5000/video" target="_blank">
+                📹 Direct Video Stream
+            </a>
+        </div>
+
+        <h2>📝 Server Information</h2>
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr style="background: #f8f9fa;">
+                <td style="padding: 10px; border: 1px solid #ddd;"><strong>Server IP</strong></td>
+                <td style="padding: 10px; border: 1px solid #ddd;">192.168.100.148</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px; border: 1px solid #ddd;"><strong>Port</strong></td>
+                <td style="padding: 10px; border: 1px solid #ddd;">5000</td>
+            </tr>
+            <tr style="background: #f8f9fa;">
+                <td style="padding: 10px; border: 1px solid #ddd;"><strong>Camera</strong></td>
+                <td style="padding: 10px; border: 1px solid #ddd;">OV5647 (Pi Camera v1)</td>
+            </tr>
+            <tr>
+                <td style="padding: 10px; border: 1px solid #ddd;"><strong>Resolution</strong></td>
+                <td style="padding: 10px; border: 1px solid #ddd;">640x480 @ 20fps</td>
+            </tr>
+            <tr style="background: #f8f9fa;">
+                <td style="padding: 10px; border: 1px solid #ddd;"><strong>Format</strong></td>
+                <td style="padding: 10px; border: 1px solid #ddd;">MJPEG</td>
+            </tr>
+        </table>
+
+        <h2>🛠️ Troubleshooting</h2>
+        <ul>
+            <li><strong>Video not loading?</strong> Try Chrome or Firefox instead of Safari</li>
+            <li><strong>Still not working?</strong> Check server logs: <code>./view_pi_logs.sh</code></li>
+            <li><strong>Need to restart?</strong> Run: <code>./restart_pi_server.sh</code></li>
+            <li><strong>Check from terminal:</strong> <code>curl http://192.168.100.148:5000/health</code></li>
+        </ul>
+    </div>
+
+    <script>
+        // Check if image loads
+        const img = document.querySelector('img');
+        img.onerror = function() {
+            this.src = '';
+            this.alt = '❌ Video stream not available. Check server logs.';
+            this.style.display = 'none';
+            const container = this.parentElement;
+            const errorDiv = document.createElement('div');
+            errorDiv.style.color = 'white';
+            errorDiv.style.padding = '20px';
+            errorDiv.innerHTML = '<h3>❌ Video Stream Not Available</h3><p>Server may not be running or camera may have an error.</p><p>Run: <code style="color: #ffeb3b;">./view_pi_logs.sh</code> to check logs</p>';
+            container.appendChild(errorDiv);
+        };
+
+        // Auto-refresh health check
+        setInterval(function() {
+            fetch('http://192.168.100.148:5000/health')
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Health check:', data);
+                })
+                .catch(err => {
+                    console.error('Server not reachable:', err);
+                });
+        }, 5000);
+    </script>
+</body>
+</html>

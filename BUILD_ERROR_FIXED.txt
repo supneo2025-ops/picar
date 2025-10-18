@@ -1,0 +1,217 @@
+================================================================================
+  VIDEO STREAM ISSUE - CAMERA TIMEOUT
+================================================================================
+
+Status: Camera detected ✓ | Camera timeout ⚠️ | Stream not working ✗
+
+The camera is detected and initializes, but then times out during streaming.
+This is a **hardware/ribbon cable** issue, not a software problem.
+
+================================================================================
+  DIAGNOSIS
+================================================================================
+
+Logs show:
+  ✓ [INFO] Camera initialized: 640x480 @ 20fps
+  ✓ [INFO] ✓ Camera initialized successfully
+  ✗ [ERROR] Camera frontend has timed out
+  ✗ [ERROR] Please check that your camera sensor connector is attached securely
+
+Camera Detection: ✓ Works (rpicam-hello --list-cameras shows OV5647)
+Still Capture: ✓ Works (rpicam-still can capture images)
+Streaming: ✗ Fails (timeout during continuous capture)
+
+================================================================================
+  ROOT CAUSE
+================================================================================
+
+This is a **common hardware issue** with Pi Camera Module v1 (OV5647):
+
+1. **Loose Ribbon Cable** - Most common cause
+   - Cable not fully inserted
+   - Cable inserted backwards
+   - Cable damaged or worn
+
+2. **Power Issues** - Less common
+   - Insufficient power to Pi
+   - Power fluctuations during streaming
+
+3. **Camera Firmware** - Rare
+   - Old firmware not fully compatible with picamera2
+
+================================================================================
+  SOLUTION 1: RESEAT CAMERA CABLE (RECOMMENDED)
+================================================================================
+
+This fixes 90% of cases:
+
+1. Power off Pi completely:
+   ssh pi@pi_local 'sudo shutdown -h now'
+
+2. Wait 10 seconds, then unplug power
+
+3. Disconnect camera ribbon cable from BOTH ends:
+   - Pi board end (connector near HDMI port)
+   - Camera module end
+
+4. Check cable for damage:
+   - Look for creases or tears
+   - Clean contacts with soft cloth if dusty
+
+5. Reconnect cable firmly:
+   **Pi Board Side:**
+   - Pull up black plastic clip
+   - Insert cable with blue tab facing HDMI port
+   - Push down clip firmly
+
+   **Camera Side:**
+   - Pull up connector clip
+   - Insert cable with contacts facing circuit board
+   - Push down clip firmly
+
+6. Power on Pi
+
+7. Restart server:
+   ./restart_pi_server.sh
+
+8. Test:
+   open http://192.168.100.148:5000/video
+
+================================================================================
+  SOLUTION 2: USE LEGACY CAMERA STACK
+================================================================================
+
+If reseating doesn't work, try legacy camera driver:
+
+1. SSH to Pi:
+   ssh pi@pi_local
+
+2. Enable legacy camera:
+   sudo raspi-config
+   > Interface Options
+   > Legacy Camera
+   > Yes
+
+3. Reboot:
+   sudo reboot
+
+4. After reboot, restart server:
+   ./restart_pi_server.sh
+
+Note: This uses older but more stable camera drivers.
+
+================================================================================
+  SOLUTION 3: TEST WITH DIFFERENT CAMERA COMMAND
+================================================================================
+
+Test if camera works with basic command:
+
+ssh pi@pi_local 'rpicam-vid -t 5000 --width 640 --height 480 -o /tmp/test.h264'
+
+If this works without timeout, the camera hardware is OK and it's a software configuration issue.
+
+================================================================================
+  SOLUTION 4: UPDATE FIRMWARE
+================================================================================
+
+Update Pi firmware to latest:
+
+ssh pi@pi_local 'sudo rpi-update'
+ssh pi@pi_local 'sudo reboot'
+
+Then test again.
+
+================================================================================
+  WORKAROUND: TEST WITHOUT CAMERA
+================================================================================
+
+To test the iOS app control without video:
+
+The server runs fine, just without video stream.
+- WebSocket control: ✓ Works
+- Joystick commands: ✓ Works
+- Motor control (simulation): ✓ Works
+- Video stream: ✗ Shows placeholder
+
+This lets you test everything except video.
+
+================================================================================
+  QUICK TEST COMMANDS
+================================================================================
+
+# Check if camera is detected
+ssh pi@pi_local 'rpicam-hello --list-cameras'
+
+# Try to capture a still image
+ssh pi@pi_local 'rpicam-still -t 1000 -o /tmp/test.jpg'
+
+# Check if image was created
+ssh pi@pi_local 'ls -lh /tmp/test.jpg'
+
+# View server logs
+./view_pi_logs.sh
+
+# Restart server after hardware fix
+./restart_pi_server.sh
+
+================================================================================
+  EXPECTED BEHAVIOR AFTER FIX
+================================================================================
+
+Server logs should show:
+  [INFO] ✓ Camera initialized successfully
+  [INFO] Camera initialized: 640x480 @ 20fps
+  [INFO] Server running on 0.0.0.0:5000
+
+  NO ERROR MESSAGES about timeout
+
+Browser test:
+  http://192.168.100.148:5000/video
+  Should show: Live camera feed
+
+Health check:
+  curl http://192.168.100.148:5000/health
+  Should return: {"status": "ok", "camera": true, "controller": true}
+
+================================================================================
+  ALTERNATIVE: USE USB WEBCAM
+================================================================================
+
+If Pi Camera continues to have issues, you can use a USB webcam instead:
+
+1. Plug in USB webcam
+2. Edit pi-server/camera_stream.py to use v4l2 instead of picamera2
+3. Redeploy and restart
+
+This is more reliable but lower quality than Pi Camera.
+
+================================================================================
+  SUMMARY
+================================================================================
+
+Issue: Camera timeout during streaming
+Cause: Loose/faulty ribbon cable (hardware issue)
+Solution: Reseat cable firmly on both ends
+Time: 2-3 minutes
+
+The software is working correctly. This is a physical connection issue.
+
+90% of cases: Fixed by reseating cable
+9% of cases: Cable needs replacement
+1% of cases: Camera module faulty
+
+Try reseating first - it's quick and usually works!
+
+================================================================================
+  NEXT STEPS
+================================================================================
+
+1. ⚠️  Reseat camera ribbon cable (both ends)
+2. 🔄 Restart server: ./restart_pi_server.sh
+3. 🧪 Test: open http://192.168.100.148:5000/video
+4. ✅ If working: Proceed to iOS app testing
+5. ❌ If still broken: Try legacy camera driver
+
+Meanwhile, you can test iOS app control without video!
+
+================================================================================

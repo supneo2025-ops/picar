@@ -1,0 +1,26 @@
+# Flask web framework
+Flask==3.0.0
+
+# WebSocket support for Flask
+Flask-SocketIO==5.3.5
+
+# WebSocket protocol implementation
+python-socketio==5.10.0
+
+# ASGI server for production deployment
+eventlet==0.33.3
+
+# Raspberry Pi GPIO control
+RPi.GPIO==0.7.1
+
+# Modern camera interface for Raspberry Pi
+picamera2==0.3.16
+
+# Image processing
+Pillow==10.1.0
+
+# Additional dependencies for picamera2
+numpy==1.24.4
+
+# Optional: For better performance
+simplejpeg==1.7.1
