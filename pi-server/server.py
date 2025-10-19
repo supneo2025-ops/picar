@@ -293,6 +293,8 @@ def handle_control(data):
         # Control car
         if car:
             car.process_joystick_input(x, y)
+            if config.DEBUG:
+                logger.info(f"Control command received: x={x:.2f}, y={y:.2f}")
         else:
             logger.warning("Car controller not available")
 

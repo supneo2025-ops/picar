@@ -174,6 +174,7 @@ class WebSocketClient: NSObject, ObservableObject {
             DispatchQueue.main.async {
                 self.isConnected = true
             }
+            send(message: "40")
         } else if text.hasPrefix("3") {
             // Pong response
             // Connection is alive
