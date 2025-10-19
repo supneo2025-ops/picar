@@ -111,6 +111,23 @@ class WebSocketClient: NSObject, ObservableObject {
         send(message: socketIOMessage)
     }
 
+    func sendDualControl(left: Double, right: Double) {
+        let message: [String: Any] = [
+            "type": "dual",
+            "left": left,
+            "right": right
+        ]
+
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: message),
+              let jsonString = String(data: jsonData, encoding: .utf8) else {
+            print("Failed to encode dual control message")
+            return
+        }
+
+        let socketIOMessage = "42[\"control\",\(jsonString)]"
+        send(message: socketIOMessage)
+    }
+
     func sendPing() {
         // Socket.IO ping format
         send(message: "2")
@@ -175,6 +192,9 @@ class WebSocketClient: NSObject, ObservableObject {
                 self.isConnected = true
             }
             send(message: "40")
+        } else if text.hasPrefix("2") {
+            // Engine.IO ping - respond with pong
+            send(message: "3")
         } else if text.hasPrefix("3") {
             // Pong response
             // Connection is alive

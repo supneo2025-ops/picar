@@ -44,8 +44,8 @@ struct MainView: View {
 
                     Spacer()
 
-                    // Joystick control
-                    joystickSection
+                    // Motor controls
+                    motorControlSection
                         .padding(.bottom, max(geometry.safeAreaInsets.bottom, 20))
                 }
             }
@@ -110,107 +110,83 @@ struct MainView: View {
         .cornerRadius(20)
     }
 
-    // MARK: - Joystick Section
+    // MARK: - Motor Controls
 
-    private var joystickSection: some View {
-        VStack(spacing: 15) {
-            // Position display
-            positionDisplay
+    private var motorControlSection: some View {
+        VStack(spacing: 18) {
+            motorStatus
 
-            // Joystick
-            JoystickView(size: 250) { position in
-                viewModel.updateJoystickPosition(position)
+            HStack(spacing: 24) {
+                MotorThrottleView(
+                    label: "Left Motor",
+                    value: $viewModel.leftThrottle
+                ) { value in
+                    viewModel.updateLeftThrottle(value)
+                }
+
+                MotorThrottleView(
+                    label: "Right Motor",
+                    value: $viewModel.rightThrottle
+                ) { value in
+                    viewModel.updateRightThrottle(value)
+                }
             }
 
-            // Control hints
             controlHints
         }
         .padding(.horizontal, 20)
     }
 
-    private var positionDisplay: some View {
-        HStack(spacing: 30) {
-            // X position
+    private var motorStatus: some View {
+        HStack(spacing: 20) {
             VStack(spacing: 4) {
-                Text("Turn")
+                Text("Left Output")
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.7))
-
-                HStack(spacing: 4) {
-                    Image(systemName: viewModel.currentPosition.x < -0.1 ? "arrow.left.circle.fill" :
-                          viewModel.currentPosition.x > 0.1 ? "arrow.right.circle.fill" : "circle")
-                        .foregroundColor(.blue)
-
-                    Text(String(format: "%.2f", viewModel.currentPosition.x))
-                        .font(.system(size: 16, weight: .semibold, design: .monospaced))
-                        .foregroundColor(.white)
-                        .frame(width: 50)
-                }
+                Text(String(format: "% .2f", viewModel.leftThrottle))
+                    .font(.system(size: 18, weight: .semibold, design: .monospaced))
+                    .foregroundColor(.white)
             }
+            .frame(maxWidth: .infinity)
 
-            Divider()
-                .background(Color.white.opacity(0.3))
-                .frame(height: 30)
-
-            // Y position
             VStack(spacing: 4) {
-                Text("Speed")
+                Text("Right Output")
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.7))
-
-                HStack(spacing: 4) {
-                    Image(systemName: viewModel.currentPosition.y > 0.1 ? "arrow.up.circle.fill" :
-                          viewModel.currentPosition.y < -0.1 ? "arrow.down.circle.fill" : "circle")
-                        .foregroundColor(.blue)
-
-                    Text(String(format: "%.2f", viewModel.currentPosition.y))
-                        .font(.system(size: 16, weight: .semibold, design: .monospaced))
-                        .foregroundColor(.white)
-                        .frame(width: 50)
-                }
+                Text(String(format: "% .2f", viewModel.rightThrottle))
+                    .font(.system(size: 18, weight: .semibold, design: .monospaced))
+                    .foregroundColor(.white)
             }
+            .frame(maxWidth: .infinity)
         }
         .padding(.vertical, 10)
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 16)
         .background(Color.white.opacity(0.1))
         .cornerRadius(12)
     }
 
     private var controlHints: some View {
         VStack(spacing: 6) {
-            HStack(spacing: 20) {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 12))
-                    Text("Forward")
-                        .font(.caption)
-                }
-
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.down")
-                        .font(.system(size: 12))
-                    Text("Backward")
-                        .font(.caption)
-                }
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 12))
+                Text("Push up to drive forward")
+                    .font(.caption)
             }
 
-            HStack(spacing: 20) {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.left")
-                        .font(.system(size: 12))
-                    Text("Turn Left")
-                        .font(.caption)
-                }
-
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 12))
-                    Text("Turn Right")
-                        .font(.caption)
-                }
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 12))
+                Text("Push down to reverse")
+                    .font(.caption)
             }
+
+            Text("Control each motor independently using the left and right sliders.")
+                .font(.caption2)
+                .multilineTextAlignment(.center)
+                .foregroundColor(.white.opacity(0.6))
         }
-        .foregroundColor(.white.opacity(0.6))
+        .foregroundColor(.white.opacity(0.7))
     }
 }
 

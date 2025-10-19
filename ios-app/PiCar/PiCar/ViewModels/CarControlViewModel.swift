@@ -14,7 +14,8 @@ class CarControlViewModel: ObservableObject {
 
     @Published var isConnected = false
     @Published var lastError: String?
-    @Published var currentPosition: CGPoint = .zero
+    @Published var leftThrottle: Double = 0.0
+    @Published var rightThrottle: Double = 0.0
 
     // MARK: - Private Properties
 
@@ -64,30 +65,30 @@ class CarControlViewModel: ObservableObject {
 
     // MARK: - Control
 
-    func updateJoystickPosition(_ position: CGPoint) {
-        currentPosition = position
-
-        // Send command immediately (throttling handled internally)
-        sendControlCommand(x: position.x, y: position.y)
+    func updateLeftThrottle(_ value: Double) {
+        leftThrottle = value
+        sendDualControlCommand()
     }
 
-    private func sendControlCommand(x: Double, y: Double) {
-        // Invalidate existing throttle timer
+    func updateRightThrottle(_ value: Double) {
+        rightThrottle = value
+        sendDualControlCommand()
+    }
+
+    private func sendDualControlCommand() {
         commandThrottle?.invalidate()
 
-        // Send command
-        webSocketClient.sendControl(x: x, y: y)
+        webSocketClient.sendDualControl(left: leftThrottle, right: rightThrottle)
 
-        // Setup throttle timer to prevent command spam
-        commandThrottle = Timer.scheduledTimer(withTimeInterval: commandInterval, repeats: false) { _ in
-            // Timer expired, next command can be sent
-        }
+        commandThrottle = Timer.scheduledTimer(withTimeInterval: commandInterval, repeats: false) { _ in }
     }
 
     // MARK: - Convenience Methods
 
     func stop() {
-        updateJoystickPosition(.zero)
+        leftThrottle = 0.0
+        rightThrottle = 0.0
+        sendDualControlCommand()
     }
 
     func sendPing() {

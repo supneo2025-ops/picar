@@ -276,8 +276,19 @@ def handle_control(data):
         if isinstance(data, str):
             data = json.loads(data)
 
-        command_type = data.get('type')
-        if command_type != 'control':
+        command_type = data.get('type', 'control')
+
+        if command_type == 'dual':
+            if car:
+                left = float(data.get('left', 0))
+                right = float(data.get('right', 0))
+                if config.DEBUG:
+                    logger.info(f"Dual control received: left={left:.2f}, right={right:.2f}")
+                car.process_dual_input(left, right)
+            else:
+                logger.warning("Car controller not available")
+            return
+        elif command_type != 'control':
             logger.warning(f"Unknown command type: {command_type}")
             return
 

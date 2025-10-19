@@ -145,8 +145,13 @@ class CarController:
         x = max(-1.0, min(1.0, x))
         y = max(-1.0, min(1.0, y))
 
-        # Apply dead zone
-        if abs(x) < config.JOYSTICK_DEAD_ZONE and abs(y) < config.JOYSTICK_DEAD_ZONE:
+        # Apply axis-specific dead zones to avoid unintended drift
+        if abs(x) < config.JOYSTICK_DEAD_ZONE:
+            x = 0.0
+        if abs(y) < config.JOYSTICK_DEAD_ZONE:
+            y = 0.0
+
+        if x == 0.0 and y == 0.0:
             self.stop()
             return
 
@@ -182,6 +187,43 @@ class CarController:
             self.logger.debug(
                 f"Joystick: ({x:.2f}, {y:.2f}) -> "
                 f"Left: {left_direction}@{left_pwm}%, Right: {right_direction}@{right_pwm}%"
+            )
+
+    def process_dual_input(self, left: float, right: float):
+        """
+        Control motors independently using normalized left/right values
+
+        Args:
+            left: -1.0 (full reverse) to 1.0 (full forward) for left motor
+            right: -1.0 (full reverse) to 1.0 (full forward) for right motor
+        """
+        self.last_command_time = time.time()
+
+        left = max(-1.0, min(1.0, left))
+        right = max(-1.0, min(1.0, right))
+
+        if abs(left) < config.JOYSTICK_DEAD_ZONE:
+            left = 0.0
+        if abs(right) < config.JOYSTICK_DEAD_ZONE:
+            right = 0.0
+
+        if left == 0.0 and right == 0.0:
+            self.stop()
+            return
+
+        left_direction = 1 if left > 0 else (-1 if left < 0 else 0)
+        right_direction = 1 if right > 0 else (-1 if right < 0 else 0)
+
+        left_pwm = self._map_speed(abs(left))
+        right_pwm = self._map_speed(abs(right))
+
+        self._set_motor_a(left_direction, left_pwm)
+        self._set_motor_b(right_direction, right_pwm)
+
+        if config.DEBUG:
+            self.logger.debug(
+                f"Dual control -> Left: {left_direction}@{left_pwm}%, "
+                f"Right: {right_direction}@{right_pwm}%"
             )
 
     def _map_speed(self, normalized_speed: float) -> int:
