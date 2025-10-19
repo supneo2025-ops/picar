@@ -43,6 +43,7 @@ DEFAULT_SPEED = 70
 # ============================================================================
 
 # Invert motor direction if your motors are wired backwards
+# Both motors have same wiring orientation
 MOTOR_A_INVERTED = False
 MOTOR_B_INVERTED = False
 

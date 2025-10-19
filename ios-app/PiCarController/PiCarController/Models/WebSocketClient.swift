@@ -44,6 +44,12 @@ class WebSocketClient: NSObject, ObservableObject {
     // MARK: - Connection Management
 
     func connect() {
+        // Don't reconnect if already connected
+        if webSocketTask?.state == .running {
+            print("WebSocket already connected, skipping reconnect")
+            return
+        }
+
         disconnect()
 
         // Construct WebSocket URL
@@ -64,14 +70,6 @@ class WebSocketClient: NSObject, ObservableObject {
 
         // Start receiving messages
         receiveMessage()
-
-        // Update connection status after a short delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            if self.webSocketTask?.state == .running {
-                self.isConnected = true
-                print("WebSocket connected")
-            }
-        }
     }
 
     func disconnect() {
@@ -188,10 +186,8 @@ class WebSocketClient: NSObject, ObservableObject {
         if text.hasPrefix("0") {
             // Connection acknowledgment
             print("Received connection ack")
-            DispatchQueue.main.async {
-                self.isConnected = true
-            }
             send(message: "40")
+            // Connection state will be set by delegate callback
         } else if text.hasPrefix("2") {
             // Engine.IO ping - respond with pong
             send(message: "3")

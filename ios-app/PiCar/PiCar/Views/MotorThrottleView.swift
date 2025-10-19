@@ -13,6 +13,8 @@ struct MotorThrottleView: View {
     let onValueChanged: (Double) -> Void
 
     private let sliderRange: ClosedRange<Double> = 0...1
+    @State private var localValue: Double = 0.5
+    @State private var isInitialized: Bool = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -36,28 +38,49 @@ struct MotorThrottleView: View {
                 .padding(.vertical, 8)
 
                 Slider(
-                    value: Binding(
-                        get: { (value + 1) / 2 },
-                        set: { newValue in
-                            let mapped = max(-1, min(1, (newValue * 2) - 1))
-                            value = mapped
+                    value: $localValue,
+                    in: sliderRange,
+                    onEditingChanged: { editing in
+                        if !editing && isInitialized {
+                            // User finished dragging - send final value
+                            let mapped = (localValue * 2) - 1
                             onValueChanged(mapped)
                         }
-                    ),
-                    in: sliderRange
+                    }
                 )
+                .onChange(of: localValue) { newValue in
+                    // Only send updates after initialization
+                    guard isInitialized else { return }
+                    let mapped = (newValue * 2) - 1
+                    onValueChanged(mapped)
+                }
                 .rotationEffect(.degrees(-90))
                 .padding(.horizontal, 18)
             }
             .frame(width: 90, height: 240)
+            .onAppear {
+                // Initialize local value from binding
+                localValue = (value + 1) / 2
+                // Mark as initialized to start sending updates
+                isInitialized = true
+            }
+            .onChange(of: value) { newValue in
+                // Update local value when external value changes (but don't send back)
+                let normalized = (newValue + 1) / 2
+                if abs(normalized - localValue) > 0.01 {
+                    localValue = normalized
+                }
+            }
 
             Text(String(format: "% .2f", value))
                 .font(.system(size: 16, weight: .semibold, design: .monospaced))
                 .foregroundStyle(.white)
 
             Button(action: {
-                value = 0
-                onValueChanged(0)
+                localValue = 0.5  // Center position (maps to 0)
+                if isInitialized {
+                    onValueChanged(0)
+                }
             }) {
                 Text("Center")
                     .font(.caption)
@@ -77,4 +100,3 @@ struct MotorThrottleView: View {
     }
     .frame(width: 140, height: 360)
 }
-

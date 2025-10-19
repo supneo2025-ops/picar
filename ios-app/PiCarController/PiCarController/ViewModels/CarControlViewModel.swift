@@ -21,7 +21,9 @@ class CarControlViewModel: ObservableObject {
 
     private let webSocketClient: WebSocketClient
     private var cancellables = Set<AnyCancellable>()
-    private var commandThrottle: Timer?
+    private var lastCommandTime: Date = .distantPast
+    private var pendingCommand: (() -> Void)?
+    private var throttleTimer: Timer?
 
     // Throttle configuration
     private let commandInterval: TimeInterval = 0.05 // 50ms = ~20 commands per second
@@ -76,9 +78,39 @@ class CarControlViewModel: ObservableObject {
     }
 
     private func sendDualControlCommand() {
-        commandThrottle?.invalidate()
+        let now = Date()
+        let timeSinceLastCommand = now.timeIntervalSince(lastCommandTime)
+
+        if timeSinceLastCommand >= commandInterval {
+            // Enough time has passed, send immediately
+            executeSendCommand()
+            lastCommandTime = now
+
+            // Cancel any pending command
+            throttleTimer?.invalidate()
+            throttleTimer = nil
+            pendingCommand = nil
+        } else {
+            // Too soon, schedule for later
+            pendingCommand = { [weak self] in
+                self?.executeSendCommand()
+                self?.lastCommandTime = Date()
+            }
+
+            // Only create timer if one doesn't exist
+            if throttleTimer == nil {
+                let delay = commandInterval - timeSinceLastCommand
+                throttleTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+                    self?.pendingCommand?()
+                    self?.pendingCommand = nil
+                    self?.throttleTimer = nil
+                }
+            }
+        }
+    }
+
+    private func executeSendCommand() {
         webSocketClient.sendDualControl(left: leftThrottle, right: rightThrottle)
-        commandThrottle = Timer.scheduledTimer(withTimeInterval: commandInterval, repeats: false) { _ in }
     }
 
     // MARK: - Convenience Methods
@@ -97,6 +129,8 @@ class CarControlViewModel: ObservableObject {
 
     deinit {
         disconnect()
-        commandThrottle?.invalidate()
+        throttleTimer?.invalidate()
+        throttleTimer = nil
+        pendingCommand = nil
     }
 }

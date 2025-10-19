@@ -220,11 +220,11 @@ class CarController:
         self._set_motor_a(left_direction, left_pwm)
         self._set_motor_b(right_direction, right_pwm)
 
-        if config.DEBUG:
-            self.logger.debug(
-                f"Dual control -> Left: {left_direction}@{left_pwm}%, "
-                f"Right: {right_direction}@{right_pwm}%"
-            )
+        # Always log for debugging motor switching issue
+        self.logger.info(
+            f"⚡ MOTORS: A(left)={left_direction:+d}@{left_pwm}%, "
+            f"B(right)={right_direction:+d}@{right_pwm}%"
+        )
 
     def _map_speed(self, normalized_speed: float) -> int:
         """

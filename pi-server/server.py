@@ -282,8 +282,8 @@ def handle_control(data):
             if car:
                 left = float(data.get('left', 0))
                 right = float(data.get('right', 0))
-                if config.DEBUG:
-                    logger.info(f"Dual control received: left={left:.2f}, right={right:.2f}")
+                # Always log dual control commands for debugging
+                logger.info(f"🎮 DUAL CONTROL: left={left:+.3f}, right={right:+.3f}")
                 car.process_dual_input(left, right)
             else:
                 logger.warning("Car controller not available")
