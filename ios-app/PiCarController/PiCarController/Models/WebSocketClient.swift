@@ -23,11 +23,9 @@ class WebSocketClient: NSObject, ObservableObject {
     // MARK: - Private Properties
 
     private var webSocketTask: URLSessionWebSocketTask?
-    private var handshakeTask: URLSessionDataTask?
     private var urlSession: URLSession?
     private var reconnectTimer: Timer?
     private var shouldReconnect = true
-    private var currentSid: String?
 
     // MARK: - Initialization
 
@@ -48,18 +46,38 @@ class WebSocketClient: NSObject, ObservableObject {
     func connect() {
         disconnect()
 
+        // Construct WebSocket URL
+        // Socket.IO uses /socket.io/?EIO=4&transport=websocket
+        let urlString = "ws://\(Self.PI_SERVER_IP):\(Self.PI_SERVER_PORT)/socket.io/?EIO=4&transport=websocket"
+
+        guard let url = URL(string: urlString) else {
+            print("Invalid WebSocket URL")
+            lastError = "Invalid URL"
+            return
+        }
+
+        print("Connecting to: \(urlString)")
+
         shouldReconnect = true
-        initiateHandshake()
+        webSocketTask = urlSession?.webSocketTask(with: url)
+        webSocketTask?.resume()
+
+        // Start receiving messages
+        receiveMessage()
+
+        // Update connection status after a short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            if self.webSocketTask?.state == .running {
+                self.isConnected = true
+                print("WebSocket connected")
+            }
+        }
     }
 
     func disconnect() {
         shouldReconnect = false
         reconnectTimer?.invalidate()
         reconnectTimer = nil
-
-        handshakeTask?.cancel()
-        handshakeTask = nil
-        currentSid = nil
 
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
@@ -74,11 +92,6 @@ class WebSocketClient: NSObject, ObservableObject {
     // MARK: - Message Handling
 
     func sendControl(x: Double, y: Double) {
-        guard webSocketTask != nil else {
-            print("WebSocket not connected; skipping control send")
-            return
-        }
-
         let message: [String: Any] = [
             "type": "control",
             "x": x,
@@ -201,80 +214,6 @@ class WebSocketClient: NSObject, ObservableObject {
                 self.isConnected = connected
             }
         }
-    }
-
-    private func initiateHandshake() {
-        handshakeTask?.cancel()
-
-        let timestamp = Int(Date().timeIntervalSince1970 * 1000)
-        let urlString = "http://\(Self.PI_SERVER_IP):\(Self.PI_SERVER_PORT)/socket.io/?EIO=4&transport=polling&t=\(timestamp)"
-
-        guard let url = URL(string: urlString) else {
-            DispatchQueue.main.async { self.lastError = "Invalid handshake URL" }
-            scheduleReconnect()
-            return
-        }
-
-        print("Starting Socket.IO handshake: \(urlString)")
-
-        handshakeTask = URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
-            guard let self = self else { return }
-
-            if let error = error {
-                print("Handshake failed: \(error.localizedDescription)")
-                DispatchQueue.main.async { self.lastError = error.localizedDescription }
-                self.scheduleReconnect()
-                return
-            }
-
-            guard
-                let data = data,
-                let payload = String(data: data, encoding: .utf8),
-                payload.first == "0",
-                let braceIndex = payload.firstIndex(of: "{")
-            else {
-                print("Unexpected handshake payload")
-                DispatchQueue.main.async { self.lastError = "Handshake failed" }
-                self.scheduleReconnect()
-                return
-            }
-
-            let jsonString = String(payload[braceIndex...])
-
-            guard
-                let jsonData = jsonString.data(using: .utf8),
-                let jsonObject = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
-                let sid = jsonObject["sid"] as? String
-            else {
-                print("Failed to parse handshake SID")
-                DispatchQueue.main.async { self.lastError = "Handshake parse error" }
-                self.scheduleReconnect()
-                return
-            }
-
-            print("Handshake SID: \(sid)")
-            self.currentSid = sid
-            self.openWebSocket(with: sid)
-        }
-
-        handshakeTask?.resume()
-    }
-
-    private func openWebSocket(with sid: String) {
-        let urlString = "ws://\(Self.PI_SERVER_IP):\(Self.PI_SERVER_PORT)/socket.io/?EIO=4&transport=websocket&sid=\(sid)"
-
-        guard let url = URL(string: urlString) else {
-            DispatchQueue.main.async { self.lastError = "Invalid WebSocket URL" }
-            scheduleReconnect()
-            return
-        }
-
-        print("Connecting to: \(urlString)")
-
-        webSocketTask = urlSession?.webSocketTask(with: url)
-        webSocketTask?.resume()
-
-        receiveMessage()
     }
 
     // MARK: - Reconnection
